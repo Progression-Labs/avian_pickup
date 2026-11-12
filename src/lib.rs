@@ -21,14 +21,10 @@ pub use verb::Holding;
 pub use rng::*;
 /// Everything you need to get started with Avian Pickup.
 pub mod prelude {
-    pub(crate) use super::{
-        HandleVerbSystem,
-        cooldown::prelude::*,
-        prop::{NonPickupMass, prelude::*},
-    };
+    pub(crate) use super::{HandleVerbSystem, cooldown::prelude::*, prop::NonPickupMass};
     pub use crate::{
         AvianPickupPlugin, AvianPickupSystem, actor::prelude::*, input::prelude::*,
-        output::prelude::*,
+        output::prelude::*, prop::prelude::*,
     };
     pub(crate) use avian3d::prelude::*;
     pub(crate) use bevy_app::prelude::*;

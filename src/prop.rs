@@ -12,8 +12,9 @@ pub(super) fn plugin(_app: &mut App) {}
 
 pub(super) mod prelude {
     pub use super::{
-        HeldProp, PickupMassOverride, PitchRangeOverride, PreferredPickupDistanceOverride,
-        PreferredPickupRotation, ThrownAngularSpeedOverride, ThrownLinearSpeedOverride,
+        HeldProp, HoldPose, PickupMassOverride, PitchRangeOverride,
+        PreferredPickupDistanceOverride, PreferredPickupRotation, ThrownAngularSpeedOverride,
+        ThrownLinearSpeedOverride,
     };
 }
 
@@ -36,6 +37,21 @@ pub struct PreferredPickupRotation(pub Quat);
 
 #[derive(Debug, Clone, PartialEq, Component)]
 pub(crate) struct PrePickupRotation(pub Quat);
+
+/// Insert this on a prop to hold it at a pose of its own in the actor's frame, as a hand holds
+/// a thing by its grip, instead of at a distance ahead of the actor: while held, the prop's
+/// origin is driven to `actor * pose`, rotation and all (no pitch clamp, no preferred distance;
+/// [`PreferredPickupRotation`] is not consulted).\
+/// An obstacle (the actor's `obstacle_filter`) between the actor's origin and that place holds
+/// the prop short of it, on the actor's side.
+#[derive(Debug, Clone, Copy, PartialEq, Component, Default, Reflect)]
+#[reflect(Debug, Component, PartialEq, Default)]
+#[cfg_attr(
+    feature = "serialize",
+    derive(serde::Serialize, serde::Deserialize),
+    reflect(Serialize, Deserialize)
+)]
+pub struct HoldPose(pub Transform);
 
 /// Insert this on a prop to override
 /// [`AvianPickupActorHoldConfig::pitch_range`](crate::prelude::AvianPickupActorHoldConfig::pitch_range).

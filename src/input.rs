@@ -9,7 +9,7 @@ use crate::{
 };
 
 pub(super) mod prelude {
-    pub use super::{AvianPickupAction, AvianPickupInput};
+    pub use super::{AvianPickupAction, AvianPickupInput, HoldProp, ReleaseProp};
 }
 
 pub(super) fn plugin(app: &mut App) {
@@ -53,6 +53,102 @@ pub enum AvianPickupAction {
 impl AvianPickupAction {
     pub(crate) fn iter() -> impl Iterator<Item = Self> {
         [Self::Throw, Self::Drop, Self::Pull].iter().copied()
+    }
+}
+
+/// An [`EntityCommand`] on an [`AvianPickupActor`]: hold this prop now, whatever the actor aims
+/// at and however far the prop is, past the pull and its cooldowns. For a game that has
+/// already chosen what is taken (a focus, a touch, an NPC's plan) and only wants it held.
+///
+/// The prop must be a dynamic rigid body in the actor's environment that nobody holds, and
+/// the actor must hold nothing; otherwise nothing happens and the log says why.
+///
+/// ```
+/// # use avian_pickup::prelude::*;
+/// # use bevy::prelude::*;
+/// fn take(mut commands: Commands, hand: Single<Entity, With<AvianPickupActor>>, prop: Entity) {
+///     commands.entity(*hand).queue(HoldProp(prop));
+/// }
+/// ```
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct HoldProp(pub Entity);
+
+impl EntityCommand for HoldProp {
+    type Out = ();
+
+    fn apply(self, entity_world: EntityWorldMut) {
+        let actor = entity_world.id();
+        entity_world
+            .into_world_mut()
+            .run_system_cached_with(hold_prop, (actor, self.0))
+            .unwrap();
+    }
+}
+
+fn hold_prop(
+    In((actor, prop)): In<(Entity, Entity)>,
+    mut commands: Commands,
+    mut q_actor: Query<(&AvianPickupActorState, &mut Cooldown), With<AvianPickupActor>>,
+    q_prop: Query<(&RigidBody, Has<HeldProp>)>,
+    environments: PhysicsEnvironmentLookup,
+) {
+    let Ok((state, mut cooldown)) = q_actor.get_mut(actor) else {
+        error!("`HoldProp` was queued on {actor}, which is no `AvianPickupActor`. Ignoring.");
+        return;
+    };
+    if state.is_holding() {
+        warn!("`HoldProp`: {actor} already holds something. Ignoring.");
+        return;
+    }
+    match q_prop.get(prop) {
+        Ok((body, false)) if body.is_dynamic() => {}
+        Ok((_, true)) => {
+            warn!("`HoldProp`: {prop} is already held. Ignoring.");
+            return;
+        }
+        _ => {
+            error!("`HoldProp`: {prop} is not a dynamic rigid body. Ignoring.");
+            return;
+        }
+    }
+    let environment = environments.environment_of(actor);
+    if environment.is_none() || environment != environments.environment_of(prop) {
+        error!("`HoldProp`: {actor} and {prop} are not in one `PhysicsEnvironment`. Ignoring.");
+        return;
+    }
+    cooldown.hold();
+    commands.entity(actor).queue(SetVerb::new(Verb::Hold(prop)));
+}
+
+/// An [`EntityCommand`] on an [`AvianPickupActor`]: let go of what it holds now, past the
+/// drop's cooldown. The prop keeps the velocity it has (clamped as any drop's), so a prop
+/// following a moving hand leaves with the hand's velocity. Sends [`PropDropped`] on the
+/// next physics step. Nothing happens for an actor that holds nothing.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ReleaseProp;
+
+impl EntityCommand for ReleaseProp {
+    type Out = ();
+
+    fn apply(self, entity_world: EntityWorldMut) {
+        let actor = entity_world.id();
+        entity_world
+            .into_world_mut()
+            .run_system_cached_with(release_prop, actor)
+            .unwrap();
+    }
+}
+
+fn release_prop(
+    In(actor): In<Entity>,
+    mut commands: Commands,
+    q_actor: Query<&crate::verb::Holding, With<AvianPickupActor>>,
+) {
+    if let Ok(holding) = q_actor.get(actor) {
+        commands.entity(actor).queue(SetVerb::new(Verb::Drop {
+            prop: holding.0,
+            forced: false,
+        }));
     }
 }
 

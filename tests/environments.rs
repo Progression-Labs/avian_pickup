@@ -4,7 +4,7 @@
 
 use std::f32::consts::FRAC_PI_2;
 
-use avian_pickup::{prelude::*, prop::HeldProp};
+use avian_pickup::prelude::*;
 use avian3d::prelude::*;
 use bevy::{prelude::*, time::TimeUpdateStrategy};
 use core::time::Duration;
@@ -202,4 +202,89 @@ fn a_prop_that_leaves_the_environment_is_dropped() {
         }]
     );
     assert!(app.world().get::<HeldProp>(prop).is_none());
+}
+
+/// `HoldProp` holds the named prop at once, wherever the actor aims; a `HoldPose` on the prop
+/// is where it is held in the actor's frame; `ReleaseProp` lets go at the prop's own velocity.
+#[test]
+fn a_named_prop_is_held_at_its_pose_and_released() {
+    let mut app = app();
+    let env = environment(&mut app, far_turned());
+    let hand = actor(&mut app, env, Vec3::new(0.0, 1.0, 0.0));
+    // Behind the actor, out of any cone.
+    let prop = crate_at(&mut app, env, Vec3::new(0.3, 0.6, 1.0));
+    let pose = Transform::from_xyz(0.1, -0.2, -0.4).with_rotation(Quat::from_rotation_z(1.0));
+    app.world_mut().entity_mut(prop).insert(HoldPose(pose));
+    step(&mut app, 5);
+
+    app.world_mut()
+        .commands()
+        .entity(hand)
+        .queue(HoldProp(prop));
+    step(&mut app, 90);
+    assert_eq!(state(&app, hand), AvianPickupActorState::Holding(prop));
+    let at = position(&app, prop);
+    assert!(
+        at.distance(Vec3::new(0.1, 0.8, -0.4)) < 0.03,
+        "at its pose in the actor's frame, at {at}"
+    );
+    let turned = app.world().get::<Rotation>(prop).unwrap().0;
+    assert!(turned.angle_between(pose.rotation) < 0.05);
+
+    // The hand moves at 1.2 m/s along x; let go mid-motion: the prop leaves with that.
+    for _ in 0..30 {
+        app.world_mut()
+            .get_mut::<Transform>(hand)
+            .unwrap()
+            .translation
+            .x += 0.02;
+        app.update();
+    }
+    app.world_mut().commands().entity(hand).queue(ReleaseProp);
+    step(&mut app, 2);
+    assert_eq!(state(&app, hand), AvianPickupActorState::Idle);
+    let velocity = app.world().get::<LinearVelocity>(prop).unwrap().0;
+    assert!(
+        (velocity.x - 1.2).abs() < 0.15,
+        "released at the hand's velocity, {velocity} m/s"
+    );
+    assert_eq!(
+        app.world().resource::<Dropped>().0.as_slice(),
+        [PropDropped {
+            prop,
+            actor: hand,
+            forced: false
+        }]
+    );
+}
+
+/// A wall between the actor and a prop's `HoldPose` holds the prop on the actor's side.
+#[test]
+fn a_hold_pose_behind_a_wall_is_held_short() {
+    let mut app = app();
+    let env = environment(&mut app, far_turned());
+    let hand = actor(&mut app, env, Vec3::new(0.0, 1.0, 0.0));
+    let prop = crate_at(&mut app, env, Vec3::new(0.0, 1.0, -0.4));
+    app.world_mut()
+        .entity_mut(prop)
+        .insert(HoldPose(Transform::from_xyz(0.0, 0.0, -1.0)));
+    // Its near face at z = -0.65.
+    app.world_mut().spawn((
+        RigidBody::Static,
+        Collider::cuboid(6.0, 6.0, 0.1),
+        Transform::from_xyz(0.0, 1.0, -0.7),
+        ChildOf(env),
+    ));
+    step(&mut app, 5);
+    app.world_mut()
+        .commands()
+        .entity(hand)
+        .queue(HoldProp(prop));
+    step(&mut app, 120);
+    assert_eq!(state(&app, hand), AvianPickupActorState::Holding(prop));
+    let at = position(&app, prop);
+    assert!(
+        at.z > -0.65 + 0.15 - 0.03 && at.z < -0.3,
+        "short of the wall, at {at}"
+    );
 }

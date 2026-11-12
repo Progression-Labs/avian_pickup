@@ -32,6 +32,7 @@ fn set_targets(
         Option<&PreferredPickupRotation>,
         Option<&PreferredPickupDistanceOverride>,
         Option<&PitchRangeOverride>,
+        Option<&HoldPose>,
     )>,
 
     q_collider: Query<(&Position, &Rotation, &Collider, Option<&CollisionLayers>)>,
@@ -67,6 +68,7 @@ fn set_targets(
             preferred_rotation,
             preferred_distance,
             clamp_pitch,
+            hold_pose,
         )) = q_prop.get_mut(prop)
         else {
             error!("Prop entity was deleted or in an invalid state. Ignoring.");
@@ -99,6 +101,36 @@ fn set_targets(
             error!("Held prop does not have a collider in its hierarchy. Ignoring.");
             continue;
         };
+        if let Some(HoldPose(pose)) = hold_pose {
+            // A pose of the prop's own in the actor's frame: there, unless something stands
+            // between the actor and that place.
+            let target = actor_transform * *pose;
+            shadow.target_rotation = target.rotation;
+            let reach = target.translation - actor_transform.translation;
+            shadow.target_position = match Dir3::new_and_length(reach) {
+                Ok((toward, length)) => {
+                    let hit = spatial_query.cast_shape(
+                        &prop_collider,
+                        actor_transform.translation,
+                        target.rotation,
+                        toward,
+                        &ShapeCastConfig {
+                            max_distance: length,
+                            ignore_origin_penetration: true,
+                            ..default()
+                        },
+                        &config
+                            .obstacle_filter
+                            .clone()
+                            .with_excluded_entities(colliders.iter()),
+                    );
+                    let free = hit.map_or(length, |hit| hit.distance.min(length));
+                    actor_transform.translation + toward.as_vec3() * free
+                }
+                Err(_) => target.translation,
+            };
+            continue;
+        }
         let prop_radius_wrt_direction =
             collider_get_extent(&prop_collider, prop_transform.rotation, -forward);
         let Some(prop_radius_wrt_direction) = prop_radius_wrt_direction else {

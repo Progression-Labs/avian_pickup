@@ -4,10 +4,10 @@ use bevy_ecs::relationship::Relationship as _;
 
 /// Inspired by [`CWeaponPhysCannon::FindObjectInCone`](https://github.com/ValveSoftware/source-sdk-2013/blob/master/mp/src/game/server/hl2/weapon_physcannon.cpp#L2690)
 pub(super) fn find_prop_in_cone(
-    spatial_query: &SpatialQuery,
+    spatial_query: &EnvironmentSpatialQuery,
     origin: Transform,
     config: &AvianPickupActor,
-    q_position: &Query<&GlobalTransform>,
+    q_position: &Query<&Position>,
     q_rigid_body: &Query<&RigidBody>,
     q_collider_parent: &Query<&ColliderOf>,
 ) -> Option<Prop> {
@@ -38,10 +38,7 @@ pub(super) fn find_prop_in_cone(
     let mut canditate = None;
 
     for rigid_body in rigid_bodies {
-        let Ok(object_translation) = q_position
-            .get(rigid_body)
-            .map(|transform| transform.translation())
-        else {
+        let Ok(object_translation) = q_position.get(rigid_body).map(|position| position.0) else {
             error!("Prop entity was deleted or in an invalid state. Ignoring.");
             continue;
         };

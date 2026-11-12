@@ -1,5 +1,5 @@
 use super::prelude::HoldError;
-use crate::{prelude::*, prop::PrePickupRotation, verb::Holding};
+use crate::{frame::ActorFrames, prelude::*, prop::PrePickupRotation, verb::Holding};
 
 pub(super) fn plugin(app: &mut App) {
     app.add_observer(on_add_holding);
@@ -7,7 +7,7 @@ pub(super) fn plugin(app: &mut App) {
 
 /// CGrabController::AttachEntity
 pub fn on_add_holding(
-    trigger: On<Add, Holding>,
+    trigger: On<Add<Holding>>,
     mut commands: Commands,
     mut q_actor: Query<(
         &AvianPickupActor,
@@ -15,9 +15,9 @@ pub fn on_add_holding(
         &mut HoldError,
         &Holding,
     )>,
-    q_actor_transform: Query<&GlobalTransform>,
+    frames: ActorFrames,
     mut q_prop: Query<(
-        &GlobalTransform,
+        &Rotation,
         Option<&Mass>,
         Option<&PickupMassOverride>,
         Option<&mut PrePickupRotation>,
@@ -28,23 +28,18 @@ pub fn on_add_holding(
         error!("Actor entity was deleted or in an invalid state. Ignoring.");
         return;
     };
-    let Ok(actor_transform) = q_actor_transform
-        .get(actor)
-        .map(|transform| transform.compute_transform())
-    else {
-        error!("Actor entity was deleted or in an invalid state. Ignoring.");
+    let Some((_, actor_transform)) = frames.get(actor) else {
         return;
     };
     let prop = holding.0;
     *state = AvianPickupActorState::Holding(prop);
     commands.entity(prop).try_insert(HeldProp);
-    let Ok((prop_transform, mass, pickup_mass, pre_pickup_rotation)) = q_prop.get_mut(prop) else {
+    let Ok((prop_rotation, mass, pickup_mass, pre_pickup_rotation)) = q_prop.get_mut(prop) else {
         error!("Prop entity was deleted or in an invalid state. Ignoring.");
         return;
     };
 
-    let actor_space_rotation =
-        prop_rotation_to_actor_space(prop_transform.rotation(), actor_transform);
+    let actor_space_rotation = prop_rotation_to_actor_space(prop_rotation.0, actor_transform);
     if let Some(mut pre_pickup_rotation) = pre_pickup_rotation {
         pre_pickup_rotation.0 = actor_space_rotation;
     } else {

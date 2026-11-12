@@ -5,39 +5,62 @@ authors = ["Jan Hohenheim <jan@hohenheim.ch>"]
 license = "MIT OR Apache-2.0"
 edition = "2024"
 exclude = ["/assets/", "/docs/", "/.github/"]
-repository = "https://github.com/janhohenheim/avian_pickup"
+repository = "https://github.com/Progression-Labs/avian_pickup"
 description = "A plugin for implementing picking up dynamic rigid bodies in Avian physics for the Bevy engine. Modeled after Half Life 2's gravity gun."
 keywords = ["bevy", "physics", "avian", "pickup", "gravity"]
 categories = ["game-development"]
 
 [features]
-# Since this library does not make sense without also depending on `avian3d`,
-# we are not replicating the `f32`, `f64`, `parry-f32`, and `parry-f64` features.
-# If you want to use f64 precision, add `avian_pickup` with `default-features = false`
-# and activate the f64-related features in `avian3d`.
-default = ["avian3d/f32", "avian3d/parry-f32"]
+# This library makes no sense without `avian3d`, whose precision is f32 on this lineage:
+# the default picks its parry backend, and a consumer that sets avian's features itself
+# takes `avian_pickup` with `default-features = false`.
+default = ["avian3d/parry-f32"]
 serialize = ["dep:serde", "bevy/serialize", "avian3d/serialize"]
 
 [dependencies]
 rand = "0.10"
 serde = { version = "1.0.210", optional = true }
-bevy_ecs = { version = "0.19.0", default-features = false }
-bevy_app = { version = "0.19.0", default-features = false }
-bevy_transform = { version = "0.19.0", default-features = false }
-bevy_math = { version = "0.19.0", default-features = false }
-bevy_platform = { version = "0.19.0", default-features = false }
-bevy_reflect = { version = "0.19.0", default-features = false }
-bevy_time = { version = "0.19.0", default-features = false }
-bevy_utils = { version = "0.19.0", default-features = false }
-bevy_log = { version = "0.19.0", default-features = false }
+bevy_ecs = { git = "https://github.com/bevyengine/bevy", branch = "main", default-features = false }
+bevy_app = { git = "https://github.com/bevyengine/bevy", branch = "main", default-features = false }
+bevy_transform = { git = "https://github.com/bevyengine/bevy", branch = "main", default-features = false }
+bevy_math = { git = "https://github.com/bevyengine/bevy", branch = "main", default-features = false }
+bevy_shape = { git = "https://github.com/bevyengine/bevy", branch = "main", default-features = false, features = ["std", "rand"] }
+bevy_platform = { git = "https://github.com/bevyengine/bevy", branch = "main", default-features = false }
+bevy_reflect = { git = "https://github.com/bevyengine/bevy", branch = "main", default-features = false }
+bevy_time = { git = "https://github.com/bevyengine/bevy", branch = "main", default-features = false }
+bevy_utils = { git = "https://github.com/bevyengine/bevy", branch = "main", default-features = false }
+bevy_log = { git = "https://github.com/bevyengine/bevy", branch = "main", default-features = false }
 
+# Upstream URLs: a consumer redirects bevy and avian onto its fork branches with [patch], as
+# the [patch] sections below do for this checkout's own build.
 [dependencies.avian3d]
-version = "0.7.0"
+git = "https://github.com/avianphysics/avian"
+branch = "main"
 default-features = false
 features = ["3d", "default-collider"]
 
 [dev-dependencies]
-bevy = { version = "0.19.0", features = ["dynamic_linking"] }
+# The tests' headless app. avian3d compiles only with bevy's curves and `Visibility`
+# (bevy_camera) on, which its own manifest does not turn on.
+bevy = { git = "https://github.com/bevyengine/bevy", branch = "main", default-features = false, features = ["std", "bevy_log", "bevy_curve", "bevy_camera"] }
+
+# The branches zero's manifest names (Progression-Labs/zero Cargo.toml): this checkout builds
+# and tests against the bevy and avian the game runs.
+[patch."https://github.com/bevyengine/bevy"]
+bevy = { git = "https://github.com/Progression-Labs/bevy", branch = "claude/bsn-descendant-patch" }
+bevy_app = { git = "https://github.com/Progression-Labs/bevy", branch = "claude/bsn-descendant-patch" }
+bevy_ecs = { git = "https://github.com/Progression-Labs/bevy", branch = "claude/bsn-descendant-patch" }
+bevy_log = { git = "https://github.com/Progression-Labs/bevy", branch = "claude/bsn-descendant-patch" }
+bevy_math = { git = "https://github.com/Progression-Labs/bevy", branch = "claude/bsn-descendant-patch" }
+bevy_platform = { git = "https://github.com/Progression-Labs/bevy", branch = "claude/bsn-descendant-patch" }
+bevy_reflect = { git = "https://github.com/Progression-Labs/bevy", branch = "claude/bsn-descendant-patch" }
+bevy_shape = { git = "https://github.com/Progression-Labs/bevy", branch = "claude/bsn-descendant-patch" }
+bevy_time = { git = "https://github.com/Progression-Labs/bevy", branch = "claude/bsn-descendant-patch" }
+bevy_transform = { git = "https://github.com/Progression-Labs/bevy", branch = "claude/bsn-descendant-patch" }
+bevy_utils = { git = "https://github.com/Progression-Labs/bevy", branch = "claude/bsn-descendant-patch" }
+
+[patch."https://github.com/avianphysics/avian"]
+avian3d = { git = "https://github.com/Progression-Labs/avian", branch = "aurora" }
 
 # Enable a small amount of optimization in debug mode
 [profile.dev]

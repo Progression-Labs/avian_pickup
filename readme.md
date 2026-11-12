@@ -6,11 +6,16 @@
 A plugin for implementing picking up dynamic rigid bodies in [Avian physics](https://github.com/Jondolf/avian/) for the [Bevy engine](https://bevyengine.org/).
 Modeled after Half Life 2's gravity gun.
 
-## Examples
+## This fork
 
-[`examples/play_catch.rs`](https://github.com/janhohenheim/avian_pickup/blob/main/examples/play_catch.rs):
-
-<img src="docs/play_catch.gif" alt="A video showing the player playing catch with an NPC" width="50%">
+Progression-Labs' `aurora` branch rides bevy main and
+[Progression-Labs/avian](https://github.com/Progression-Labs/avian)'s `aurora`, where every body is in a
+`PhysicsEnvironment` and every `Position`, velocity and spatial query is in that environment's frame.
+An `AvianPickupActor` finds, pulls, holds and throws only what is in its own environment, in that
+frame, wherever the environment stands in the world; a held prop that leaves the actor's environment
+is let go (`PropDropped { forced: true }`); an actor in no environment picks up nothing and says so
+once. `tests/environments.rs` holds it. Upstream's examples need a renderer this lineage does not
+build and are not carried here.
 
 ## Features
 
@@ -150,6 +155,7 @@ fn move_camera() { todo!() }
 
 | `avian_pickup` | `avian` | `bevy` |
 |----------------|---------|--------|
+| `aurora`       | Progression-Labs `aurora` | main |
 | `0.6`          | `0.7`   | `0.19` |
 | `0.5`          | `0.6`   | `0.18` |
 | `0.4`          | `0.5`   | `0.18` |

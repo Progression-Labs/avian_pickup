@@ -1,5 +1,6 @@
 use super::{HoldSystem, prelude::*};
 use crate::{
+    frame::ActorFrames,
     math::rigid_body_compound_collider,
     prelude::*,
     prop::PrePickupRotation,
@@ -14,16 +15,17 @@ pub(super) fn plugin(app: &mut App) {
 fn set_targets(
     mut commands: Commands,
     spatial_query: SpatialQuery,
+    frames: ActorFrames,
     mut q_actor: Query<(
         Entity,
-        &GlobalTransform,
         &AvianPickupActor,
         &HoldError,
         &mut ShadowParams,
         &Holding,
     )>,
     mut q_prop: Query<(
-        &GlobalTransform,
+        &Position,
+        &Rotation,
         &ComputedCenterOfMass,
         Option<&RigidBodyColliders>,
         Option<&PrePickupRotation>,
@@ -32,10 +34,10 @@ fn set_targets(
         Option<&PitchRangeOverride>,
     )>,
 
-    q_collider: Query<(&GlobalTransform, &Collider, Option<&CollisionLayers>)>,
+    q_collider: Query<(&Position, &Rotation, &Collider, Option<&CollisionLayers>)>,
 ) {
     let max_error = 0.3048; // 12 inches in the source engine
-    for (actor, actor_transform, config, hold_error, mut shadow, holding) in q_actor.iter_mut() {
+    for (actor, config, hold_error, mut shadow, holding) in q_actor.iter_mut() {
         let prop = holding.0;
         if hold_error.error > max_error {
             commands
@@ -43,10 +45,22 @@ fn set_targets(
                 .queue(SetVerb::new(Verb::Drop { prop, forced: true }));
             continue;
         }
-        let actor_transform = actor_transform.compute_transform();
+        // The target is in the actor's environment's frame, which is the prop's too: a prop
+        // left in another environment (the actor crossed out of its own without it) is let go.
+        let Some((environment, actor_transform)) = frames.get(actor) else {
+            continue;
+        };
+        if frames.environment_of(prop) != Some(environment) {
+            commands
+                .entity(actor)
+                .queue(SetVerb::new(Verb::Drop { prop, forced: true }));
+            continue;
+        }
+        let spatial_query = spatial_query.in_environment(environment);
 
         let Ok((
-            prop_transform,
+            prop_position,
+            prop_rotation,
             prop_center_of_mass,
             rigid_body_colliders,
             pre_pickup_rotation,
@@ -58,7 +72,8 @@ fn set_targets(
             error!("Prop entity was deleted or in an invalid state. Ignoring.");
             continue;
         };
-        let prop_transform = prop_transform.compute_transform();
+        let prop_transform =
+            Transform::from_translation(prop_position.0).with_rotation(prop_rotation.0);
         let pitch_range = clamp_pitch
             .map(|c| &c.0)
             .unwrap_or(&config.hold.pitch_range);
@@ -164,7 +179,8 @@ fn set_targets(
         // Pretty sure we don't need to go through the CalcClosestPointOnLine song and
         // dance since we already have made sure that the prop has a sensible minimum
         // distance
-        shadow.target_position = center_of_mass_adjusted_actor_transform + forward * distance;
+        shadow.target_position =
+            center_of_mass_adjusted_actor_transform + forward.as_vec3() * distance;
     }
 }
 
@@ -178,7 +194,7 @@ fn set_targets(
 /// Note that we just use the AABB of the compound collider here, which is
 /// not the exact convex hull, but should be close enough.
 fn collider_get_extent(collider: &Collider, rotation: Quat, dir: Dir3) -> Option<f32> {
-    let aabb = collider.aabb(Vec3::ZERO, Quat::IDENTITY);
+    let aabb = collider.aabb(Vec3::ZERO, Quat::IDENTITY, 0.0);
     let aabb_lengths = aabb.size();
     let aabb_collider = Collider::cuboid(aabb_lengths.x, aabb_lengths.y, aabb_lengths.z);
 

@@ -8,6 +8,7 @@ use bevy_ecs::prelude::*;
 
 pub mod actor;
 mod cooldown;
+mod frame;
 pub mod input;
 mod interaction;
 mod math;
@@ -35,6 +36,7 @@ pub mod prelude {
     pub(crate) use bevy_log::prelude::*;
     pub(crate) use bevy_math::prelude::*;
     pub(crate) use bevy_reflect::prelude::*;
+    pub(crate) use bevy_shape::prelude::*;
     pub(crate) use bevy_transform::prelude::*;
     pub(crate) use bevy_utils::prelude::*;
 }

@@ -1,9 +1,8 @@
 use std::ops::RangeInclusive;
 
-use avian3d::math::Scalar;
 use rand::{Rng, RngExt};
 
-use crate::{prelude::*, rng::RngSource, verb::Throwing};
+use crate::{frame::ActorFrames, prelude::*, rng::RngSource, verb::Throwing};
 
 pub(super) fn plugin(app: &mut App) {
     app.add_systems(PhysicsSchedule, throw.in_set(HandleVerbSystem::Throw));
@@ -13,9 +12,9 @@ pub(super) fn plugin(app: &mut App) {
 /// holding any prop. I think this should be handled by the user.
 fn throw(
     mut commands: Commands,
+    frames: ActorFrames,
     mut q_actor: Query<(
         Entity,
-        &GlobalTransform,
         &AvianPickupActor,
         &mut AvianPickupActorState,
         &mut Cooldown,
@@ -31,10 +30,14 @@ fn throw(
     mut w_throw_event: MessageWriter<PropThrown>,
     mut rng: ResMut<RngSource>,
 ) {
-    for (actor, actor_transform, config, mut states, mut cooldown, throw) in q_actor.iter_mut() {
-        let actor_transform = actor_transform.compute_transform();
+    for (actor, config, mut states, mut cooldown, throw) in q_actor.iter_mut() {
         let prop = throw.0;
         commands.entity(actor).remove::<Throwing>();
+        // The prop's velocity is in its environment's frame: so is the way it is thrown.
+        let Some((_, actor_transform)) = frames.get(actor) else {
+            *states = AvianPickupActorState::Idle;
+            continue;
+        };
         // Safety: All props are rigid bodies, which are guaranteed to have a
         // `LinearVelocity`, `AngularVelocity`, and `Mass`.
         let Ok((mut velocity, mut angvel, mass, lin_speed_override, ang_speed_override)) =
@@ -51,7 +54,7 @@ fn throw(
         let lin_speed = lin_speed_override
             .map(|s| s.0)
             .unwrap_or_else(|| calculate_launch_speed(config, *mass));
-        velocity.0 = lin_direction * lin_speed;
+        velocity.0 = lin_direction.as_vec3() * lin_speed;
 
         let rand_direction = random_unit_vector(rng.as_mut());
         let rand_magnitude = ang_speed_override.map(|s| s.0).unwrap_or_else(|| {
@@ -71,7 +74,7 @@ fn random_unit_vector(rng: &mut impl Rng) -> Vec3 {
 }
 
 /// Corresponds to 2013's Pickup_DefaultPhysGunLaunchVelocity
-fn calculate_launch_speed(config: &AvianPickupActor, mass: ComputedMass) -> Scalar {
+fn calculate_launch_speed(config: &AvianPickupActor, mass: ComputedMass) -> f32 {
     let speed_range = &config.throw.linear_speed_range;
     let (min_speed, max_speed) = (*speed_range.start(), *speed_range.end());
     if mass.value() < config.throw.cutoff_mass_for_slowdown {
@@ -90,11 +93,7 @@ fn calculate_launch_speed(config: &AvianPickupActor, mass: ComputedMass) -> Scal
 /// `domain` and `image` are mathematical terms.
 ///
 /// Corresponds to 2013's `SimpleSplineRemapValClamped`
-fn remap_through_spline(
-    val: Scalar,
-    domain: RangeInclusive<Scalar>,
-    image: RangeInclusive<Scalar>,
-) -> Scalar {
+fn remap_through_spline(val: f32, domain: RangeInclusive<f32>, image: RangeInclusive<f32>) -> f32 {
     let (a, b) = (*domain.start(), *domain.end());
     let (c, d) = (*image.start(), *image.end());
     if a == b {

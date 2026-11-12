@@ -1,4 +1,5 @@
 use crate::{
+    frame::ActorFrames,
     prelude::*,
     verb::{Pulling, SetVerb, Verb},
 };
@@ -21,10 +22,10 @@ pub(super) fn plugin(app: &mut App) {
 fn find_object(
     mut commands: Commands,
     spatial_query: SpatialQuery,
+    frames: ActorFrames,
     mut q_actor: Query<
         (
             Entity,
-            &GlobalTransform,
             &AvianPickupActor,
             &mut AvianPickupActorState,
             &mut Cooldown,
@@ -32,17 +33,16 @@ fn find_object(
         With<Pulling>,
     >,
     q_collider_parent: Query<&ColliderOf>,
-    mut q_rigid_body: Query<(
-        &RigidBody,
-        &ComputedMass,
-        Forces,
-        &GlobalTransform,
-        Has<HeldProp>,
-    )>,
-    q_position: Query<&GlobalTransform>,
+    mut q_rigid_body: Query<(&RigidBody, &ComputedMass, Forces, &Position, Has<HeldProp>)>,
+    q_position: Query<&Position>,
 ) {
-    for (actor, actor_transform, config, mut state, mut cooldown) in q_actor.iter_mut() {
-        let actor_transform = actor_transform.compute_transform();
+    for (actor, config, mut state, mut cooldown) in q_actor.iter_mut() {
+        // Everything from here on is in the actor's environment and its frame: only that
+        // environment's colliders are found, and the pull is along that frame's axes.
+        let Some((environment, actor_transform)) = frames.get(actor) else {
+            continue;
+        };
+        let spatial_query = spatial_query.in_environment(environment);
         let prop = find_prop_in_trace(
             &spatial_query,
             actor_transform,
@@ -82,8 +82,7 @@ fn find_object(
                 .entity(actor)
                 .queue(SetVerb::new(Verb::Hold(prop.entity)));
         } else {
-            let direction =
-                (actor_transform.translation - prop_position.translation()).normalize_or_zero();
+            let direction = (actor_transform.translation - prop_position.0).normalize_or_zero();
             let mass_adjustment = adjust_impulse_for_mass(mass);
             let pull_impulse = direction * config.pull.impulse * mass_adjustment;
             cooldown.pull();

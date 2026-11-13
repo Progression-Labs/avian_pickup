@@ -321,3 +321,43 @@ fn a_released_prop_has_its_own_mass_again() {
         mass(&app)
     );
 }
+
+/// What the actor's obstacle filter leaves out stays left out while it holds: a body the
+/// actor stands inside (its own) does not stop a prop held at a pose beyond it.
+#[test]
+fn the_obstacle_filters_exclusions_hold_while_holding() {
+    let mut app = app();
+    let env = environment(&mut app, far_turned());
+    let hand = actor(&mut app, env, Vec3::new(0.0, 1.0, 0.0));
+    // The actor's own body, between its origin and where the prop is held.
+    let body = app
+        .world_mut()
+        .spawn((
+            RigidBody::Kinematic,
+            Collider::cylinder(0.32, 1.8),
+            CollisionLayers::new(LayerMask::DEFAULT, LayerMask::NONE),
+            Transform::from_xyz(0.0, 0.9, -0.2),
+            ChildOf(env),
+        ))
+        .id();
+    app.world_mut()
+        .get_mut::<AvianPickupActor>(hand)
+        .unwrap()
+        .obstacle_filter = SpatialQueryFilter::from_excluded_entities([body]);
+    let prop = crate_at(&mut app, env, Vec3::new(0.0, 1.0, -1.2));
+    app.world_mut().entity_mut(prop).insert((
+        CollisionLayers::new(LayerMask(2), LayerMask::ALL),
+        HoldPose(Transform::from_xyz(0.0, 0.0, -0.4)),
+    ));
+    step(&mut app, 5);
+    app.world_mut()
+        .commands()
+        .entity(hand)
+        .queue(HoldProp(prop));
+    step(&mut app, 90);
+    let at = position(&app, prop);
+    assert!(
+        at.distance(Vec3::new(0.0, 1.0, -0.4)) < 0.03,
+        "at its pose past the body, at {at}"
+    );
+}

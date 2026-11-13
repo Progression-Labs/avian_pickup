@@ -119,10 +119,7 @@ fn set_targets(
                             ignore_origin_penetration: true,
                             ..default()
                         },
-                        &config
-                            .obstacle_filter
-                            .clone()
-                            .with_excluded_entities(colliders.iter()),
+                        &obstacles_but(&config.obstacle_filter, colliders.iter()),
                     );
                     let free = hit.map_or(length, |hit| hit.distance.min(length));
                     actor_transform.translation + toward.as_vec3() * free
@@ -192,10 +189,7 @@ fn set_targets(
                 ignore_origin_penetration: false,
                 ..default()
             },
-            &config
-                .obstacle_filter
-                .clone()
-                .with_excluded_entities(colliders.iter()),
+            &obstacles_but(&config.obstacle_filter, colliders.iter()),
         );
         let distance = if let Some(terrain_hit) = terrain_hit {
             let toi = terrain_hit.distance;
@@ -214,6 +208,18 @@ fn set_targets(
         shadow.target_position =
             center_of_mass_adjusted_actor_transform + forward.as_vec3() * distance;
     }
+}
+
+/// The actor's obstacle filter, less the held prop's own colliders: added to what the filter
+/// already leaves out (`with_excluded_entities` replaces the set, which let back in whatever
+/// the actor had excluded: its own body, standing right where the hold starts).
+fn obstacles_but(
+    filter: &SpatialQueryFilter,
+    colliders: impl IntoIterator<Item = Entity>,
+) -> SpatialQueryFilter {
+    let mut filter = filter.clone();
+    filter.excluded_entities.extend(colliders);
+    filter
 }
 
 /// The original code gets the support point of the collider in the direction,

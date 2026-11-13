@@ -29,6 +29,11 @@ fn on_remove_holding(
         commands.entity(entity).try_insert(non_pickup_mass.0);
         commands.entity(entity).remove::<NonPickupMass>();
     } else {
-        commands.entity(entity).remove::<Mass>();
+        // Avian recomputes a body's mass when a `Mass` changes, not when one is taken off:
+        // without the marker the prop would keep the pickup's mass for good.
+        commands
+            .entity(entity)
+            .remove::<Mass>()
+            .try_insert(avian3d::prelude::mass_properties::components::RecomputeMassProperties);
     }
 }

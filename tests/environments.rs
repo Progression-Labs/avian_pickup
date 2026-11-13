@@ -288,3 +288,36 @@ fn a_hold_pose_behind_a_wall_is_held_short() {
         "short of the wall, at {at}"
     );
 }
+
+/// A prop let go of weighs what it weighed before it was taken, not the pickup's 1 kg.
+#[test]
+fn a_released_prop_has_its_own_mass_again() {
+    let mut app = app();
+    let env = environment(&mut app, far_turned());
+    let hand = actor(&mut app, env, Vec3::new(0.0, 1.0, 0.0));
+    let prop = crate_at(&mut app, env, Vec3::new(0.0, 1.0, -1.0));
+    app.world_mut()
+        .entity_mut(prop)
+        .insert(ColliderDensity(400.0));
+    step(&mut app, 5);
+    let mass = |app: &App| app.world().get::<ComputedMass>(prop).unwrap().value();
+    let own = mass(&app);
+    assert!(
+        (own - 0.027 * 400.0).abs() < 0.01,
+        "a 0.3 m cube at 400 kg/m3, {own} kg"
+    );
+
+    app.world_mut()
+        .commands()
+        .entity(hand)
+        .queue(HoldProp(prop));
+    step(&mut app, 10);
+    assert!((mass(&app) - 1.0).abs() < 1e-3, "held at the pickup's mass");
+    app.world_mut().commands().entity(hand).queue(ReleaseProp);
+    step(&mut app, 10);
+    assert!(
+        (mass(&app) - own).abs() < 0.01,
+        "{} kg after, {own} kg before",
+        mass(&app)
+    );
+}
